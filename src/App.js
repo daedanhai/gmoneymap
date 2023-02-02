@@ -1,111 +1,83 @@
 import axios from 'axios'
 import './App.css';
-import { useEffect, useMemo, useState } from 'react';
-import { Map, MapMarker, MarkerClusterer ,useMap} from 'react-kakao-maps-sdk';
-import { Route, Routes } from 'react-router-dom';
-
+import { useEffect, useRef, useState } from 'react';
+const { kakao } = window;
+// 이때, 아래의 사진처럼 kakao.maps 부분에 'kakao' is not undefined 오류가 나는 것을 발견할 수 있습니다.
+// 이유는 스크립트로 kakao maps api를 심어서 가져오면 window 전역 객체에 들어가게 됩니다.
+// 그런데 함수형 컴포넌트에서는 이를 바로 인식하지 못한다고 합니다.
+// 그렇기 때문에 코드 상단에 const { kakao } = window를 작성하여 함수형 컴포넌트에 인지 시키고 window에서 kakao객체를 뽑아서 사용하면 됩니다.
 
 function App() {
-  const dataUrl = 'https://api.odcloud.kr/api/15036011/v1/uddi:fc22c9fb-b27b-4693-9563-dd67097eb5c3?page=1&perPage=300&serviceKey=620gIHWFqC%2FtXHpl8VcnOnfSQG3WaN5lQ4h4pxCK4dwjQr1QLlVOt0sopW186ChnXGVyxhZE%2FNADigXJrrXV4g%3D%3D';
-  let [ dataArr,setDataArr ] = useState([]);
-  // let [ filtedData,setFiltedData ] = useState([]);
+  let [ storeArr, setStoreArr ] = useState([]);
+  let [ dataFinish, setDataFinish ] = useState(false);
+  let mapRef = useRef(null);
   
   useEffect(()=>{
-    axios.get(dataUrl)
-      .then((response) => {
-        setDataArr(response.data.data);
-      })
-      .catch((error)=> {
-        console.log(error.data);
-      });
+    const container = document.getElementById('map-area');
+    const options = {
+      center : new kakao.maps.LatLng(37.7387295, 127.0458908), //지도 중심 의정부역
+      level : 5,
+    }
+    mapRef.current = new kakao.maps.Map(container, options);
+    getData();
   },[]);
-  console.log(dataArr);
 
+  useEffect(()=>{
+    if (dataFinish) {
+      const points = storeArr.map( el => {
+        return new kakao.maps.LatLng(el['위도'], el['경도'])
+      });
 
-  // useEffect(()=>{
-  //   dataFilted();
-  // },[dataArr]);
+      var i, marker;
+      for (i = 0; i < points.length; i++) {
+        // 배열의 좌표들이 잘 보이게 마커를 지도에 추가합니다
+        marker = new kakao.maps.Marker({ position : points[i] });
+        marker.setMap(mapRef.current);
+      }
+    }
+  },[storeArr, dataFinish])
+ 
+  // const getData = (matchCount) => {
+  //   if(!matchCount){ matchCount = 10 }
+  //   let url =  `https://api.odcloud.kr/api/15036011/v1/uddi:fc22c9fb-b27b-4693-9563-dd67097eb5c3?page=1&perPage=${matchCount}&serviceKey=620gIHWFqC%2FtXHpl8VcnOnfSQG3WaN5lQ4h4pxCK4dwjQr1QLlVOt0sopW186ChnXGVyxhZE%2FNADigXJrrXV4g%3D%3D`;
+  //   axios.get(url)
+  //     .then((Response) => {
+  //       if(matchCount === 10){
+  //         console.log('시발', Response)
+  //         getData(Response.data.matchCount);
+  //       } else {
+  //         console.log('야발', Response)
+  //         setStoreArr(Response.data.data);
+  //       }
+  //     })
+  //     .catch((Error)=>{
+  //       console.log(Error);
+  //     })
+  // }
 
-
-  const dataFilted = ()=>{
-    return(
-      setFiltedData(
-        dataArr.map((el)=>{
-          return (
-            {
-              name: el['상호명'],
-              location: el['소재지(도로명주소)'],
-              latlng: { lat: el['위도'], lng: el['경도'] }
-            }
-          )
-        })
-      )
-    )
-  };
-
-  const EventMarkerContainer = ({ lng , lat, name, location }) => {
-    const map = useMap()
-    const [isVisible, setIsVisible] = useState(false);
-    return (
-      <MapMarker
-        position={ {
-          lat: lat,
-          lng: lng,
-        } } // 마커를 표시할 위치
-        // @ts-ignore
-        onClick={ ( marker ) => map.panTo( marker.getPosition() )}
-        onMouseOver={ () => setIsVisible(true) }
-        onMouseOut={ () => setIsVisible(false) }
-      >
-        { 
-          isVisible &&
-          <div className='info-wrap'>
-            <h4>{name}</h4>
-            <p>{location}</p>
-          </div>
+  const getData = (page) => {
+    if(!page){ page = 1 }
+    let url =  `https://api.odcloud.kr/api/15036011/v1/uddi:fc22c9fb-b27b-4693-9563-dd67097eb5c3?page=${page}&perPage=1000&serviceKey=620gIHWFqC%2FtXHpl8VcnOnfSQG3WaN5lQ4h4pxCK4dwjQr1QLlVOt0sopW186ChnXGVyxhZE%2FNADigXJrrXV4g%3D%3D`;
+    axios.get(url)
+      .then((Response) => {
+        if(Response.data.data.length != 0){
+          getData(++page);
+          setStoreArr((storeArr) => [...storeArr, ...Response.data.data]);
+        } else {
+          setDataFinish(true);
         }
-      </MapMarker>
-    )
+      })
+      .catch((Error)=>{
+        console.log(Error);
+      })
   }
 
   return (
     <div className="App">
-      
-      <Routes>
-        <Route path="/" element={
-          <Map // 지도를 표시할 Container
-            center={{
-              // 지도의 중심좌표
-              lat: 37.7387295,
-              lng: 127.0458908,
-            }}
-            style={{
-              // 지도의 크기
-              width: "100%",
-              height: "100vh",
-            }}
-            level={5} // 지도의 확대 레벨
-          >
-            <MarkerClusterer
-              averageCenter={true} // 클러스터에 포함된 마커들의 평균 위치를 클러스터 마커 위치로 설정
-              minLevel={5} // 클러스터 할 최소 지도 레벨
-            >
-            { 
-              dataArr.map((value, idx) => (
-                <EventMarkerContainer
-                  key={ idx }
-                  lat = { value['위도'] }
-                  lng = { value['경도']}
-                  name={ value['상호명'] }
-                  location={ value['소재지(도로명주소)'] }
-                />
-              ))
-            }
-            </MarkerClusterer>
-          </Map>
-        } />
-        <Route path="/test" element={<div className='test'>테스트</div>} />
-      </Routes>
+      {
+        !dataFinish && <div>데이터 로딩중 입니다.</div> 
+      }
+      <div id='map-area' style={{width:'100%', height:'100vh'}}></div>
     </div>
   );
 }
